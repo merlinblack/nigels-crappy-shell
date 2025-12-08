@@ -1,0 +1,9 @@
+﻿---
+BasedOnStyle: Chromium
+#BreakBeforeBraces: Linux
+UseTab: Never
+AlignArrayOfStructures: Left
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  BeforeElse: true
