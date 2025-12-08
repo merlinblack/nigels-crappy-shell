@@ -36,7 +36,7 @@ void cd(const char* path)
     }
     strcat(expanded, home);
     strcat(expanded, "/");
-    path++;
+    path += 2;
   }
 
   strcat(expanded, path);
@@ -62,16 +62,20 @@ int main(int argc, char* argv[])
     puts(cwd);
     char* input = readline("NCS> ");
 
-    if (!input || strcmp(input, "exit") == 0) {
+    if (!input || strcmp("exit", input) == 0) {
       free(input);
       shouldStop = true;
       puts("Ok, bye!");
       continue;
     }
 
-    add_history(input);
-
     arguments[0] = strtok(input, DELIM);
+
+    if (arguments[0] == nullptr) {
+      continue;
+    }
+
+    add_history(input);
 
     int i = 0;
 
@@ -82,7 +86,7 @@ int main(int argc, char* argv[])
       puts(arguments[i]);
     }
 
-    if (strcmp(arguments[0], "cd") == 0) {
+    if (strcmp("cd", arguments[0]) == 0) {
       if (arguments[1] == nullptr) {
         // No arguments
         cd("~");
