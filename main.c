@@ -1,6 +1,7 @@
 // turn off header re-ordering as stdio.h needs to be before readline. Ufff.
 // clang-format off
 #include <linux/limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <readline/readline.h>
@@ -12,21 +13,37 @@
 
 #define DELIM " "
 
-void cd_home()
+void cd(const char* path)
 {
-  char* home = getenv("HOME");
+  char expanded[PATH_MAX];
 
-  if (!home) {
-    puts("HOME not set!!");
+  expanded[0] = 0;
+
+  if (strlen(path) >= PATH_MAX) {
+    puts("Path is too long!");
     return;
   }
 
-  chdir(home);
-}
+  if (path[0] == '~') {
+    char* home = getenv("HOME");
+    if (!home) {
+      puts("HOME not set!!");
+      return;
+    }
+    if (strlen(home) + strlen(path) + 1 >= PATH_MAX) {
+      puts("Path with ~ is too long to expand.");
+      return;
+    }
+    strcat(expanded, home);
+    strcat(expanded, "/");
+    path++;
+  }
 
-void cd(const char* path)
-{
-  if (chdir(path)) {
+  strcat(expanded, path);
+
+  printf("cd: %s\n", expanded);
+
+  if (chdir(expanded)) {
     perror("There was a bit of an issue:");
   }
 }
@@ -39,17 +56,20 @@ int main(int argc, char* argv[])
   char cwd[PATH_MAX];
   char* arguments[255];
 
+  getcwd(cwd, PATH_MAX);
+
   while (!shouldStop) {
-    getcwd(cwd, PATH_MAX);
     puts(cwd);
     char* input = readline("NCS> ");
 
-    if (strcmp(input, "exit") == 0) {
+    if (!input || strcmp(input, "exit") == 0) {
       free(input);
       shouldStop = true;
       puts("Ok, bye!");
       continue;
     }
+
+    add_history(input);
 
     arguments[0] = strtok(input, DELIM);
 
@@ -65,16 +85,14 @@ int main(int argc, char* argv[])
     if (strcmp(arguments[0], "cd") == 0) {
       if (arguments[1] == nullptr) {
         // No arguments
-        cd_home();
-      }
-      else if (strcmp(arguments[1], "~") == 0) {
-        cd_home();
+        cd("~");
       }
       else {
         cd(arguments[1]);
       }
 
       free(input);
+      getcwd(cwd, PATH_MAX);
       continue;
     }
 
