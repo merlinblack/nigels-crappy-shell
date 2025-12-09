@@ -1,7 +1,6 @@
 // turn off header re-ordering as stdio.h needs to be before readline. Ufff.
 // clang-format off
 #include <linux/limits.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <readline/readline.h>
@@ -11,7 +10,7 @@
 #include <sys/wait.h>
 // clang-format on
 
-#define DELIM " "
+void delimit(char* str);  // str_delimit.c
 
 void cd(const char* path)
 {
@@ -36,7 +35,10 @@ void cd(const char* path)
     }
     strcat(expanded, home);
     strcat(expanded, "/");
-    path += 2;
+    path++;
+    if (*path == '/') {
+      path++;
+    }
   }
 
   strcat(expanded, path);
@@ -44,7 +46,7 @@ void cd(const char* path)
   printf("cd: %s\n", expanded);
 
   if (chdir(expanded)) {
-    perror("There was a bit of an issue:");
+    perror("There was a bit of an issue");
   }
 }
 
@@ -69,20 +71,34 @@ int main(int argc, char* argv[])
       continue;
     }
 
-    arguments[0] = strtok(input, DELIM);
-
-    if (arguments[0] == nullptr) {
+    if (!input[0]) {
       continue;
     }
 
     add_history(input);
 
-    int i = 0;
+    int length = strlen(input);
 
-    while ((arguments[++i] = strtok(nullptr, DELIM)))
-      ;
+    delimit(input);
 
-    for (i = 0; arguments[i]; i++) {
+    int token = 0;
+    int position = 0;
+
+    while (position < length) {
+      if (token == 254)
+        break;
+      arguments[token++] = &input[position];
+      while (input[position] && position <= length) {
+        position++;
+      }
+      while (!input[position] && position <= length) {
+        position++;
+      }
+    }
+
+    arguments[token] = nullptr;
+
+    for (int i = 0; arguments[i]; i++) {
       puts(arguments[i]);
     }
 
