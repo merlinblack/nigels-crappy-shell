@@ -1,69 +1,141 @@
+#include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
-int pipe_children(const char* first, const char* second)
+typedef struct pipe_child {
+  char path[PATH_MAX];
+  char* arguments[256];
+  __pid_t pid;
+  struct pipe_child* next;
+} pipe_child;
+
+int pipe_children(pipe_child* first)
 {
-  int pipe_fds[2];
-
-  if (pipe(pipe_fds)) {
-    return -1;
+  // Make all required pipes before spwaning children incase of error.
+  pipe_child* child = first;
+  int num_children = 0;
+  while (child) {
+    num_children++;
+    child = child->next;
   }
 
-  // First child
-  int first_pid = fork();
+  int pipes[num_children - 1][2];
 
-  switch (first_pid) {
-    case -1:
+  int current_pipe;
+  for (current_pipe = 0; current_pipe < num_children - 1; current_pipe++) {
+    if (pipe(pipes[current_pipe])) {
+      // Error,
+      // Close previously made pipes
+      while (current_pipe > 0) {
+        current_pipe--;
+        close(pipes[current_pipe][0]);
+        close(pipes[current_pipe][1]);
+      }
       return -1;
-    case 0:  // child
-      puts("---- First child");
-      dup2(pipe_fds[1], STDOUT_FILENO);
-      close(pipe_fds[0]);
-      execlp(first, first, nullptr);
-      // If we are here, something went wrong.
-      perror("---- Problem with first child");
-      exit(EXIT_FAILURE);
-
-    default:  // parent
-      break;
+    }
   }
 
-  // Second child
-  int second_pid = fork();
+  // Spawn children and connect pipes
+  child = first;
+  current_pipe = 0;
+  while (child) {
+    printf("---- child: %s\n", child->path);
 
-  switch (second_pid) {
-    case -1:
-      return -1;
-    case 0:  // child
-      puts("---- Second child");
-      dup2(pipe_fds[0], STDIN_FILENO);
-      close(pipe_fds[1]);
-      execlp(second, second, nullptr);
-      // If we are here, something went wrong.
-      perror("---- Problem with second child");
-      exit(EXIT_FAILURE);
+    child->pid = fork();
 
-    default:  // parent
-      break;
+    switch (child->pid) {
+      case -1:
+        for (current_pipe = 0; current_pipe < num_children - 1; current_pipe++) {
+          close(pipes[current_pipe][0]);
+          close(pipes[current_pipe][1]);
+        }
+        return -1;
+      case 0:  // child
+        printf("---- %s - current_pipe %d\n", child->path, current_pipe);
+        if (child == first) {
+          dup2(pipes[current_pipe][1], STDOUT_FILENO);
+        }
+        else if (child->next == nullptr) {
+          dup2(pipes[current_pipe - 1][0], STDIN_FILENO);
+        }
+        else {
+          dup2(pipes[current_pipe - 1][0], STDIN_FILENO);
+          dup2(pipes[current_pipe][1], STDOUT_FILENO);
+        }
+
+        // Close pipes in order to not block other children. (dup'd pipes will remain)
+        for (current_pipe = 0; current_pipe < num_children - 1; current_pipe++) {
+          close(pipes[current_pipe][0]);
+          close(pipes[current_pipe][1]);
+        }
+
+        execvp(child->path, child->arguments);
+
+        // If we are here, something went wrong.
+        perror("---- Problem with child");
+        exit(EXIT_FAILURE);
+
+      default:  // parent
+        current_pipe++;
+        break;
+    }
+    child = child->next;
   }
 
-  close(pipe_fds[0]);
-  close(pipe_fds[1]);
+  for (current_pipe = 0; current_pipe < num_children - 1; current_pipe++) {
+    close(pipes[current_pipe][0]);
+    close(pipes[current_pipe][1]);
+  }
 
   puts("---- Waiting for children");
-  waitpid(first_pid, nullptr, 0);
-  puts("---- First done");
-  waitpid(second_pid, nullptr, 0);
-  puts("---- Second done");
+  child = first;
+  while (child) {
+    waitpid(child->pid, nullptr, 0);
+    printf("---- Child %s finished\n", child->path);
+    child = child->next;
+  }
 
   return 0;
 }
 
+pipe_child* add_child(pipe_child* prev, const char* path, const char** arguments)
+{
+  pipe_child* new = malloc(sizeof(pipe_child));
+
+  strncpy(new->path, path, PATH_MAX - 1);
+  for (int i = 0; arguments[i]; i++) {
+    new->arguments[i] = (char*)arguments[i];
+  }
+  new->next = nullptr;
+
+  if (prev) {
+    prev->next = new;
+  }
+
+  return new;
+}
+
 int main(int argc, char* argv[])
 {
-  if (pipe_children("ls", "lolcat")) {
+  pipe_child* children;
+  pipe_child* next;
+
+  const char* ls_args[] = {"ls", "-l", nullptr};
+  children = add_child(nullptr, "ls", ls_args);
+
+  const char* tac_args[] = {"tac", nullptr};
+  next = add_child(children, "tac", tac_args);
+
+  const char* tee_args[] = {"tee", "pipe-dump", nullptr};
+  next = add_child(next, "tee", tee_args);
+
+  const char* lolcat_args[] = {"lolcat", nullptr};
+  next = add_child(next, "lolcat", lolcat_args);
+
+  if (pipe_children(children)) {
     perror("uh oh");
     return EXIT_FAILURE;
   }
