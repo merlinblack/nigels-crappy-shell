@@ -72,6 +72,7 @@ int main(int argc, char* argv[])
     }
 
     if (!input[0]) {
+      free(input);
       continue;
     }
 
