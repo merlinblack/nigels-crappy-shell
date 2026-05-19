@@ -1,6 +1,8 @@
+#ifdef TEST_DELIMIT
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#endif
 
 bool is_delim(char c, bool insideQuotes, char quoteType)
 {
@@ -37,6 +39,10 @@ void delimit(char* str)
   while (str[pos]) {
     while (is_delim(str[pos], insideQuotes, quoteType) == false) {
       pos++;
+    }
+
+    if (str[pos] == 0) {
+      continue;
     }
 
     if (str[pos] == ' ') {
